@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
+pragma solidity 0.8.19;
 pragma experimental ABIEncoderV2;
 
 import {Test, console} from "forge-std/Test.sol";
@@ -13,14 +13,11 @@ contract PuppyRaffleTest is Test {
     address playerThree = address(3);
     address playerFour = address(4);
     address feeAddress = address(99);
+    address warmUpAddress = makeAddr("warmUp");
     uint256 duration = 1 days;
 
     function setUp() public {
-        puppyRaffle = new PuppyRaffle(
-            entranceFee,
-            feeAddress,
-            duration
-        );
+        puppyRaffle = new PuppyRaffle(entranceFee, feeAddress, duration);
     }
 
     //////////////////////
@@ -32,6 +29,30 @@ contract PuppyRaffleTest is Test {
         players[0] = playerOne;
         puppyRaffle.enterRaffle{value: entranceFee}(players);
         assertEq(puppyRaffle.players(0), playerOne);
+    }
+
+    function test_denialOfService() public {
+        vm.txGasPrice(1);
+        uint playersNum = 100;
+        address[] memory players = new address[](playersNum);
+        for (uint i = 0; i < playersNum; ++i) {
+            players[i] = address(i);
+        }
+        uint gasStart = gasleft();
+        puppyRaffle.enterRaffle{value: entranceFee * players.length}(players);
+        uint gasEnd = gasleft();
+        uint gasCost = (gasStart - gasEnd) * tx.gasprice;
+        console.log("Gas cost of first 100 players is ", gasCost);
+        address[] memory players2 = new address[](playersNum);
+        for (uint i = 0; i < playersNum; ++i) {
+            players2[i] = address(i + playersNum);
+        }
+        uint gasStart2 = gasleft();
+        puppyRaffle.enterRaffle{value: entranceFee * players2.length}(players2);
+        uint gasEnd2 = gasleft();
+        uint gasCost2 = (gasStart2 - gasEnd2) * tx.gasprice;
+        console.log("Gas cost of second 100 players is ", gasCost2);
+        assert(gasCost < gasCost2);
     }
 
     function testCantEnterWithoutPaying() public {
@@ -170,7 +191,7 @@ contract PuppyRaffleTest is Test {
         vm.warp(block.timestamp + duration + 1);
         vm.roll(block.number + 1);
 
-        uint256 expectedPayout = ((entranceFee * 4) * 80 / 100);
+        uint256 expectedPayout = (((entranceFee * 4) * 80) / 100);
 
         puppyRaffle.selectWinner();
         assertEq(address(playerFour).balance, balanceBefore + expectedPayout);
@@ -188,8 +209,8 @@ contract PuppyRaffleTest is Test {
         vm.warp(block.timestamp + duration + 1);
         vm.roll(block.number + 1);
 
-        string memory expectedTokenUri =
-            "data:application/json;base64,eyJuYW1lIjoiUHVwcHkgUmFmZmxlIiwgImRlc2NyaXB0aW9uIjoiQW4gYWRvcmFibGUgcHVwcHkhIiwgImF0dHJpYnV0ZXMiOiBbeyJ0cmFpdF90eXBlIjogInJhcml0eSIsICJ2YWx1ZSI6IGNvbW1vbn1dLCAiaW1hZ2UiOiJpcGZzOi8vUW1Tc1lSeDNMcERBYjFHWlFtN3paMUF1SFpqZmJQa0Q2SjdzOXI0MXh1MW1mOCJ9";
+        string
+            memory expectedTokenUri = "data:application/json;base64,eyJuYW1lIjoiUHVwcHkgUmFmZmxlIiwgImRlc2NyaXB0aW9uIjoiQW4gYWRvcmFibGUgcHVwcHkhIiwgImF0dHJpYnV0ZXMiOiBbeyJ0cmFpdF90eXBlIjogInJhcml0eSIsICJ2YWx1ZSI6IGNvbW1vbn1dLCAiaW1hZ2UiOiJpcGZzOi8vUW1Tc1lSeDNMcERBYjFHWlFtN3paMUF1SFpqZmJQa0Q2SjdzOXI0MXh1MW1mOCJ9";
 
         puppyRaffle.selectWinner();
         assertEq(puppyRaffle.tokenURI(0), expectedTokenUri);
