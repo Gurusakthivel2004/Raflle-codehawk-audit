@@ -117,7 +117,7 @@ contract PuppyRaffle is ERC721, Ownable {
             playerAddress != address(0),
             "PuppyRaffle: Player already refunded, or is not active"
         );
-
+        // @audit Reentrancy
         payable(msg.sender).sendValue(entranceFee);
 
         players[playerIndex] = address(0);
@@ -150,6 +150,7 @@ contract PuppyRaffle is ERC721, Ownable {
             "PuppyRaffle: Raffle not over"
         );
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
+        // @audit randomness, use chainlink VRF
         uint256 winnerIndex = uint256(
             keccak256(
                 abi.encodePacked(msg.sender, block.timestamp, block.difficulty)
@@ -159,11 +160,14 @@ contract PuppyRaffle is ERC721, Ownable {
         uint256 totalAmountCollected = players.length * entranceFee;
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
+        // @audit Overflow
+        // @audit unsafe cast of uin256 to uint64
         totalFees = totalFees + uint64(fee);
 
         uint256 tokenId = totalSupply();
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
+        //  @audit randomness
         uint256 rarity = uint256(
             keccak256(abi.encodePacked(msg.sender, block.difficulty))
         ) % 100;

