@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.7.6;
+// @audit-info : Use of floating pragma is bad!
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -21,6 +22,7 @@ contract PuppyRaffle is ERC721, Ownable {
     uint256 public immutable entranceFee;
 
     address[] public players;
+    // @audit-gas : Changing this to immutable saves gas
     uint256 public raffleDuration;
     uint256 public raffleStartTime;
     address public previousWinner;
@@ -135,6 +137,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 return i;
             }
         }
+        // @audit : What if the player is at index 0 ? the player might think that they are not active!
         return 0;
     }
 
@@ -145,6 +148,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @dev we reset the active players array after the winner is selected
     /// @dev we send 80% of the funds to the winner, the other 20% goes to the feeAddress
     function selectWinner() external {
+        // @ aduit-info : Recommended to follow CEI
         require(
             block.timestamp >= raffleStartTime + raffleDuration,
             "PuppyRaffle: Raffle not over"
@@ -157,7 +161,12 @@ contract PuppyRaffle is ERC721, Ownable {
             )
         ) % players.length;
         address winner = players[winnerIndex];
+        // @audit : Why not just use address(this).balance
         uint256 totalAmountCollected = players.length * entranceFee;
+        // @audit-info : MAGIC NUMBERS
+        // uint256 public constant PRIZE_POOL_PERCENTAGE = 80
+        // uint256 public constant FEE_PERCENTAGE = 20
+        // uint256 public constant POOL_PRECISION = 80
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
         // @audit Overflow
@@ -195,6 +204,7 @@ contract PuppyRaffle is ERC721, Ownable {
         );
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
+        // slither-disable-next-line arbitrary-send-eth
         (bool success, ) = feeAddress.call{value: feesToWithdraw}("");
         require(success, "PuppyRaffle: Failed to withdraw fees");
     }
@@ -207,6 +217,10 @@ contract PuppyRaffle is ERC721, Ownable {
     }
 
     /// @notice this function will return true if the msg.sender is an active player
+    // @audit : This isn't used anywhere..?
+    // Impact : None
+    // Likelihood : None
+    // but it's a waste of gas..!
     function _isActivePlayer() internal view returns (bool) {
         for (uint256 i = 0; i < players.length; i++) {
             if (players[i] == msg.sender) {
