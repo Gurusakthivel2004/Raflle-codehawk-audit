@@ -37,6 +37,7 @@ contract PuppyRaffle is ERC721, Ownable {
     mapping(uint256 => string) public rarityToName;
 
     // Stats for the common puppy (pug)
+    //@audit-gas : This should be constant
     string private commonImageUri =
         "ipfs://QmSsYRx3LpDAb1GZQm7zZ1AuHZjfbPkD6J7s9r41xu1mf8";
     uint256 public constant COMMON_RARITY = 70;
@@ -68,6 +69,8 @@ contract PuppyRaffle is ERC721, Ownable {
         uint256 _raffleDuration
     ) ERC721("Puppy Raffle", "PR") {
         entranceFee = _entranceFee;
+        //@audit-info : Check for zero address 
+        // input-validation 
         feeAddress = _feeAddress;
         raffleDuration = _raffleDuration;
         raffleStartTime = block.timestamp;
@@ -96,6 +99,7 @@ contract PuppyRaffle is ERC721, Ownable {
 
         // @audit : DOS
         // Check for duplicates
+        //@audit-gas : uint256 players_length = players.length;
         for (uint256 i = 0; i < players.length - 1; i++) {
             for (uint256 j = i + 1; j < players.length; j++) {
                 require(
@@ -104,6 +108,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 );
             }
         }
+        // @audit-low
         emit RaffleEnter(newPlayers);
     }
 
